@@ -1,5 +1,5 @@
 /* File Name: TFLI2C.cpp
- * Developer: Bud Ryerson
+ * Developer: Bud Ryerson (edited by Aldem Pido)
  * Date:      10 JUL 2021
  * Version:   0.1.1 - Fixed some typos in comments.
               Added a `p_` prefix to some pointer variables.
@@ -31,17 +31,28 @@
  *  There are several explicit commands
  */
 
-#include <TFLI2C.h>        //  TFLI2C library header
-#include <Wire.h>          //  Arduino I2C/Two-Wire Library
+#include "TFLI2C.hpp"
 
-// Constructor/Destructor
-TFLI2C::TFLI2C(){}
+namespace tfluna {
+  // Constructor/Destructor
+TFLI2C::TFLI2C(std::string i2c_bus, uint8_t address) : i2c_bus_(i2c_bus.c_str()), address_(address){}
 TFLI2C::~TFLI2C(){}
+
+bool TFLI2C::init() {
+  // Open i2c port
+  if((fd_ = open(i2c_bus_, O_RDWR)) < 0) {
+    return false;
+  }
+  // Flow control
+  if(ioctl(fd_, I2C_SLAVE, address_) < 0) {
+    return false;
+  }
+}
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - -
 //             GET DATA FROM THE DEVICE
 // - - - - - - - - - - - - - - - - - - - - - - - - - -
-bool TFLI2C::getData( int16_t &dist, int16_t &flux, int16_t &temp, uint8_t addr)
+bool TFLI2C::getData( int16_t &dist, int16_t &flux, int16_t &temp)
 {
     tfStatus = TFL_READY;    // clear status of any error condition
 
@@ -52,7 +63,7 @@ bool TFLI2C::getData( int16_t &dist, int16_t &flux, int16_t &temp, uint8_t addr)
     // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     for (uint8_t reg = TFL_DIST_LO; reg <= TFL_TEMP_HI; reg++)
     {
-      if( !readReg( reg, addr)) return false;
+      if( !readReg( reg, regReply)) return false;
           else dataArray[ reg] = regReply;
     }
 
@@ -92,10 +103,10 @@ bool TFLI2C::getData( int16_t &dist, int16_t &flux, int16_t &temp, uint8_t addr)
 }
 
 // Get Data short version
-bool TFLI2C::getData( int16_t &dist, uint8_t addr)
+bool TFLI2C::getData( int16_t &dist)
 {
   static int16_t flux, temp;
-  return getData( dist, flux, temp, addr);
+  return getData( dist, flux, temp);
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -104,16 +115,16 @@ bool TFLI2C::getData( int16_t &dist, uint8_t addr)
 
 //  = =  GET DEVICE TIME (in milliseconds) = = =
 //  Pass back time as an unsigned 16-bit variable
-bool TFLI2C::Get_Time( uint16_t &tim, uint8_t adr)
+bool TFLI2C::Get_Time( uint16_t &tim)
 {
     // Recast the address of the unsigned integer `tim`
     // as a pointer to an unsigned byte `p_tim`...
     uint8_t * p_tim = (uint8_t *) &tim;
 
     // ... then address the pointer as an array.
-    if( !readReg( TFL_TICK_LO, adr)) return false;
+    if( !readReg( TFL_TICK_LO, regReply)) return false;
         else p_tim[ 0] = regReply;  // Read into `tim` array
-    if( !readReg( TFL_TICK_HI, adr)) return false;
+    if( !readReg( TFL_TICK_HI, regReply)) return false;
         else p_tim[ 1] = regReply;  // Read into `tim` array
     return true;
 }
@@ -123,11 +134,11 @@ bool TFLI2C::Get_Time( uint16_t &tim, uint8_t adr)
 // it decays into a pointer to the first element of the array.
 // The 14 byte array variable `tfCode` declared in the example
 // sketch decays to the array pointer `p_cod`.
-bool TFLI2C::Get_Prod_Code( uint8_t * p_cod, uint8_t adr)
+bool TFLI2C::Get_Prod_Code( uint8_t * p_cod)
 {
    for (uint8_t i = 0; i < 14; ++i)
     {
-      if( !readReg( ( 0x10 + i), adr)) return false;
+      if( !readReg( ( 0x10 + i), regReply)) return false;
         else p_cod[ i] = regReply;  // Read into product code array
     }
     return true;
@@ -136,96 +147,96 @@ bool TFLI2C::Get_Prod_Code( uint8_t * p_cod, uint8_t adr)
 //  = = = =    GET FIRMWARE VERSION   = = = =
 // The 3 byte array variable `tfVer` declared in the
 // example sketch decays to the array pointer `p_ver`.
-bool TFLI2C::Get_Firmware_Version( uint8_t * p_ver, uint8_t adr)
+bool TFLI2C::Get_Firmware_Version( uint8_t * p_ver)
 {
     for (uint8_t i = 0; i < 3; ++i)
     {
-      if( !readReg( ( 0x0A + i), adr)) return false;
+      if( !readReg( ( 0x0A + i), regReply)) return false;
         else p_ver[ i] = regReply;  // Read into version array
     }
     return true;
 }
 
 //  = = = = =    SAVE SETTINGS   = = = = =
-bool TFLI2C::Save_Settings( uint8_t adr)
+bool TFLI2C::Save_Settings()
 {
-    return( writeReg( TFL_SAVE_SETTINGS, adr, 1));
+    return( writeReg( TFL_SAVE_SETTINGS, 1));
 }
 
 //  = = = =   SOFT (SYSTEM) RESET   = = = =
-bool TFLI2C::Soft_Reset( uint8_t adr)
+bool TFLI2C::Soft_Reset()
 {
-    return( writeReg( TFL_SOFT_RESET, adr, 2));
+    return( writeReg( TFL_SOFT_RESET, 2));
 }
 
 //  = = = = = =    SET I2C ADDRESS   = = = = = =
 // Range: 0x08, 0x77. Must reboot to take effect.
-bool TFLI2C::Set_I2C_Addr( uint8_t adrNew, uint8_t adr)
+bool TFLI2C::Set_I2C_Addr( uint8_t adrNew)
 {
-    return( writeReg( TFL_SET_I2C_ADDR, adr, adrNew));
+    return( writeReg( TFL_SET_I2C_ADDR, adrNew));
 }
 
 //  = = = = =   SET ENABLE   = = = = =
-bool TFLI2C::Set_Enable( uint8_t adr)
+bool TFLI2C::Set_Enable()
 {
-    return( writeReg( TFL_DISABLE, adr, 1));
+    return( writeReg( TFL_DISABLE, 1));
 }
 
 //  = = = = =   SET DISABLE   = = = = =
-bool TFLI2C::Set_Disable( uint8_t adr)
+bool TFLI2C::Set_Disable()
 {
-    return( writeReg( TFL_DISABLE, adr, 0));
+    return( writeReg( TFL_DISABLE, 0));
 }
 
 //  = = = = = =    SET FRAME RATE   = = = = = =
-bool TFLI2C::Set_Frame_Rate( uint16_t &frm, uint8_t adr)
+bool TFLI2C::Set_Frame_Rate( uint16_t &frm)
 {
     // Recast the address of the unsigned integer `frm`
     // as a pointer to an unsigned byte `p_frm` ...
     uint8_t * p_frm = (uint8_t *) &frm;
 
     // ... then address the pointer as an array.
-    if( !writeReg( ( TFL_FPS_LO), adr, p_frm[ 0])) return false;
-    if( !writeReg( ( TFL_FPS_HI), adr, p_frm[ 1])) return false;
+    if( !writeReg( ( TFL_FPS_LO), p_frm[ 0])) return false;
+    if( !writeReg( ( TFL_FPS_HI), p_frm[ 1])) return false;
     return true;
 }
 
 //  = = = = = =    GET FRAME RATE   = = = = = =
-bool TFLI2C::Get_Frame_Rate( uint16_t &frm, uint8_t adr)
+bool TFLI2C::Get_Frame_Rate( uint16_t &frm)
 {
     uint8_t * p_frm = (uint8_t *) &frm;
-    if( !readReg( TFL_FPS_LO, adr)) return false;
+    if( !readReg( TFL_FPS_LO)) return false;
         else p_frm[ 0] = regReply;  // Read into `frm` array
-    if( !readReg( TFL_FPS_HI, adr)) return false;
+    if( !readReg( TFL_FPS_HI)) return false;
         else p_frm[ 1] = regReply;  // Read into `frm` array
     return true;
 }
 
 //  = = = =   HARD RESET to Factory Defaults  = = = =
-bool TFLI2C::Hard_Reset( uint8_t adr)
+bool TFLI2C::Hard_Reset()
 {
-    return( writeReg( TFL_HARD_RESET, adr, 1));
+    return( writeReg( TFL_HARD_RESET, 1));
 }
 
 //  = = = = = =   SET CONTINUOUS MODE   = = = = = =
 // Sample LiDAR chip continuously at Frame Rate
-bool TFLI2C::Set_Cont_Mode( uint8_t adr)
+bool TFLI2C::Set_Cont_Mode()
 {
-    return( writeReg( TFL_SET_TRIG_MODE, adr, 0));
+    return( writeReg( TFL_SET_TRIG_MODE, 0));
 }
 
 //  = = = = = =   SET TRIGGER MODE   = = = = = =
 // Device will sample only once when triggered
-bool TFLI2C::Set_Trig_Mode( uint8_t adr)
+bool TFLI2C::Set_Trig_Mode()
 {
-    return( writeReg( TFL_SET_TRIG_MODE, adr, 1));
+    return( writeReg( TFL_SET_TRIG_MODE, 1));
 }
 
 //  = = = = = =   SET TRIGGER   = = = = = =
 // Trigger device to sample once
-bool TFLI2C::Set_Trigger( uint8_t adr)
+bool TFLI2C::Set_Trigger()
 {
-    return( writeReg( TFL_TRIGGER, adr, 1));
+    return( writeReg( TFL_TRIGGER, 1));
 }
 //
 // = = = = = = = = = = = = = = = = = = = = = = = =
@@ -233,39 +244,52 @@ bool TFLI2C::Set_Trigger( uint8_t adr)
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 //       READ OR WRITE A GIVEN REGISTER OF THE SLAVE DEVICE
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-bool TFLI2C::readReg( uint8_t nmbr, uint8_t addr)
+bool TFLI2C::readReg(uint8_t reg_addr, uint8_t& data)
 {
-  Wire.beginTransmission( addr);
-  Wire.write( nmbr);
+  if(fd_ < 0) return false;
 
-  if( Wire.endTransmission() != 0)  // If write error...
-  {
-    tfStatus = TFL_I2CWRITE;        // then set status code...
-    return false;                   // and return `false`.
-  }
-  // Request 1 byte from the device
-  // and release bus when finished.
-  Wire.requestFrom( ( int)addr, 1, true);
-    if( Wire.peek() == -1)            // If read error...
-    {
-      tfStatus = TFL_I2CREAD;         // then set status code.
+  i2c_msg messages[2];
+  i2c_rdwr_ioctl_data ioctl_data;
+
+  // Message 1: Write the register address
+  messages[0].addr = this->address_; // Use the stored device address
+  messages[0].flags = 0; // 0 for write
+  messages[0].len = 1;
+  messages[0].buf = &reg_addr;
+
+  // Message 2: Read the data from the register
+  messages[1].addr = this->address_; // Use the stored device address
+  messages[1].flags = I2C_M_RD; // Flag for read
+  messages[1].len = 1;
+  messages[1].buf = &data;
+  // Prepare the ioctl call
+  ioctl_data.msgs = messages;
+  ioctl_data.nmsgs = 2; // We have two messages
+
+  if (ioctl(fd_, I2C_RDWR, &ioctl_data) < 0) {
+      if (errno == EREMOTEIO) {
+          tfStatus = TFL_I2CREAD;
+      } else {
+            tfStatus = TFL_I2CWRITE;
+      }
+      perror("ioctl(I2C_RDWR) failed");
       return false;
-    }
-  regReply = ( uint8_t)Wire.read();   // Read the received data...
+  }
+
+  tfStatus = TFL_READY;
   return true;
 }
 
-bool TFLI2C::writeReg( uint8_t nmbr, uint8_t addr, uint8_t data)
+bool TFLI2C::writeReg(uint8_t reg_addr, uint8_t data)
 {
-  Wire.beginTransmission( addr);
-  Wire.write( nmbr);
-  Wire.write( data);
-  if( Wire.endTransmission( true) != 0)  // If write error...
-  {
+  if(fd_ < 0) return false;
+  uint8_t buffer[2];
+  buffer[0] = reg_addr;
+  buffer[1] = data;
+  if(write(fd_, buffer, 2) != 2) {
     tfStatus = TFL_I2CWRITE;        // then set status code...
-    return false;                   // and return `false`.
-  }
-  else return true;
+    return false;   
+  } else return true;
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -274,41 +298,47 @@ bool TFLI2C::writeReg( uint8_t nmbr, uint8_t addr, uint8_t data)
 
 // Called by either `printFrame()` or `printReply()`
 // Print status condition either `READY` or error type
-void TFLI2C::printStatus()
+std::string TFLI2C::printStatus()
 {
-    Serial.print("Status: ");
-    if( tfStatus == TFL_READY)          Serial.print( "READY");
-    else if( tfStatus == TFL_SERIAL)    Serial.print( "SERIAL");
-    else if( tfStatus == TFL_HEADER)    Serial.print( "HEADER");
-    else if( tfStatus == TFL_CHECKSUM)  Serial.print( "CHECKSUM");
-    else if( tfStatus == TFL_TIMEOUT)   Serial.print( "TIMEOUT");
-    else if( tfStatus == TFL_PASS)      Serial.print( "PASS");
-    else if( tfStatus == TFL_FAIL)      Serial.print( "FAIL");
-    else if( tfStatus == TFL_I2CREAD)   Serial.print( "I2C-READ");
-    else if( tfStatus == TFL_I2CWRITE)  Serial.print( "I2C-WRITE");
-    else if( tfStatus == TFL_I2CLENGTH) Serial.print( "I2C-LENGTH");
-    else if( tfStatus == TFL_WEAK)      Serial.print( "Signal weak");
-    else if( tfStatus == TFL_STRONG)    Serial.print( "Signal strong");
-    else if( tfStatus == TFL_FLOOD)     Serial.print( "Ambient light");
-    else if( tfStatus == TFL_INVALID)   Serial.print( "No Command");
-    else Serial.print( "OTHER");
+  std::string output;
+  output.clear();
+  output.append("Status: ");
+    if( tfStatus == TFL_READY)          output.append( "READY");
+    else if( tfStatus == TFL_SERIAL)    output.append( "SERIAL");
+    else if( tfStatus == TFL_HEADER)    output.append( "HEADER");
+    else if( tfStatus == TFL_CHECKSUM)  output.append( "CHECKSUM");
+    else if( tfStatus == TFL_TIMEOUT)   output.append( "TIMEOUT");
+    else if( tfStatus == TFL_PASS)      output.append( "PASS");
+    else if( tfStatus == TFL_FAIL)      output.append( "FAIL");
+    else if( tfStatus == TFL_I2CREAD)   output.append( "I2C-READ");
+    else if( tfStatus == TFL_I2CWRITE)  output.append( "I2C-WRITE");
+    else if( tfStatus == TFL_I2CLENGTH) output.append( "I2C-LENGTH");
+    else if( tfStatus == TFL_WEAK)      output.append( "Signal weak");
+    else if( tfStatus == TFL_STRONG)    output.append( "Signal strong");
+    else if( tfStatus == TFL_FLOOD)     output.append( "Ambient light");
+    else if( tfStatus == TFL_INVALID)   output.append( "No Command");
+    else output.append( "OTHER");
+  return output;
 }
 
 
 // Print error type and HEX values
 // of each byte in the data frame
-void TFLI2C::printDataArray()
+std::string TFLI2C::printDataArray()
 {
-    printStatus();
+  std::string output;
+  output.clear();
     // Print the Hex value of each byte of data
-    Serial.print(" Data:");
+    output.append(" Data:");
     for( uint8_t i = 0; i < 6; i++)
     {
-      Serial.print(" ");
-      Serial.print( dataArray[ i] < 16 ? "0" : "");
-      Serial.print( dataArray[ i], HEX);
+      output.append(" ");
+      output.append( dataArray[ i] < 16 ? "0" : "");
+      output.append( dataArray[ i] + "");
     }
-    Serial.println();
+    output.append("\n");
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+}

@@ -1,17 +1,28 @@
-/* File Name: TFLI2C.h
- * Developer: Bud Ryerson
- * Date:      10 JUL 2021
- * Version:   0.1.1 - Fixed some typos in comments.
-              Changed TFL_DEFAULT_ADDR and TFL_DEFAULT_FPS
-              to TFL_DEF_ADDR and TFL_DEF_FPS in header file.
-              Changed `printStatus` from private to public
-              0.2.0 - Corrected (reversed) Enable/Disable commands
- * Described: Arduino Library for the Benewake TF-Luna Lidar sensor
- *            configured for the I2C interface
- *
+/**
+ * @file TFLI2C.h
+ * @brief TF-Luna I2C Sensor Library for Linux
+ * @author Aldem Pido
+ * @date Aug 10 2025
+ * This is a library written for the TF-Luna I2C sensor for Ros2 Ubuntu/Linux.
+ * Ported by Aldem Pido @ IEEE UCF, Kestrel, Aug 10 2025 from the Adafruit TF-Luna I2C library for Arduino.
+ * 
+ * Some code also used from Slaughis/vl53l1x
  */
 
-#include <Arduino.h>    // Always include this. It's important.
+#include <iostream>
+#include <string>
+#include <cstdint>
+#include <stdio.h>
+#include <linux/i2c-dev.h> // for the ioctl() function
+#include <linux/i2c.h>
+#include <unistd.h>        // for the read() and write() function
+#include <fcntl.h>         // for the open() function include <stdio.h>
+#include <string.h>        // for the strlen() function
+#include <stdlib.h>        // for exit
+#include <sys/ioctl.h>
+#include <errno.h>
+#include <chrono>
+#include <thread>
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 //      Definitions
@@ -89,47 +100,52 @@
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 //                 OBJECT CLASS DEFINITIONS
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
+namespace tfluna {
 class TFLI2C
 {
   public:
-    TFLI2C();
+    TFLI2C(std::string i2c_bus = "/dev/i2c-1", uint8_t address = 0x10);
     ~TFLI2C();
 
+    bool init();
     // Get data
-    bool getData( int16_t &dist, int16_t &flux, int16_t &temp, uint8_t addr);
+    bool getData( int16_t &dist, int16_t &flux, int16_t &temp);
     // Get data short version
-    bool getData( int16_t &dist, uint8_t addr);
+    bool getData( int16_t &dist);
 
     // Read From or Write To an I2C register
-    bool readReg( uint8_t nmbr, uint8_t addr);
-    bool writeReg( uint8_t nmbr, uint8_t addr, uint8_t data);
+    bool readReg( uint8_t reg_addr, uint8_t& data);
+    bool writeReg( uint8_t reg_addr, uint8_t data);
 
     // Explicit Device Commands
-    bool Get_Firmware_Version( uint8_t ver[], uint8_t adr);
-    bool Get_Frame_Rate( uint16_t &frm, uint8_t adr);
-    bool Get_Prod_Code( uint8_t cod[], uint8_t adr);
-    bool Get_Time( uint16_t &tim, uint8_t adr);
+    bool Get_Firmware_Version( uint8_t ver[]);
+    bool Get_Frame_Rate( uint16_t &frm);
+    bool Get_Prod_Code( uint8_t cod[]);
+    bool Get_Time( uint16_t &tim);
 
-    bool Set_Frame_Rate( uint16_t &frm, uint8_t adr);
-    bool Set_I2C_Addr( uint8_t adrNew, uint8_t adr);
-    bool Set_Enable( uint8_t adr);
-    bool Set_Disable( uint8_t adr);
-    bool Soft_Reset( uint8_t adr);  // Reset and reboot
-    bool Hard_Reset( uint8_t adr);  // Restore factory defaults
-    bool Save_Settings( uint8_t adr);
-    bool Set_Trig_Mode( uint8_t adr);
-    bool Set_Cont_Mode( uint8_t adr);
-    bool Set_Trigger( uint8_t adr);  // false = continuous
+    bool Set_Frame_Rate( uint16_t &frm);
+    bool Set_I2C_Addr( uint8_t adrNew);
+    bool Set_Enable();
+    bool Set_Disable();
+    bool Soft_Reset();  // Reset and reboot
+    bool Hard_Reset();  // Restore factory defaults
+    bool Save_Settings();
+    bool Set_Trig_Mode();
+    bool Set_Cont_Mode();
+    bool Set_Trigger();  // false = continuous
 
     //  For testing purposes: print reply data and status
-    void printDataArray();
-    void printStatus();
+    std::string printDataArray();
+    std::string printStatus();
 
   private:
-
+    int fd_; // File Descriptor
+    const char* i2c_bus_; // I2C Bus
+    uint8_t address_; // I2C Address
     uint8_t tfStatus;        // system error status: READY = 0
     uint8_t dataArray[ 6];
     uint8_t regReply;
 };
 
+
+}
