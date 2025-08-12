@@ -1,0 +1,9 @@
+<library path="tfluna_driver">
+  <class type="vl53l1x::TFLunaDevice"
+         base_class_type="tca9548a::I2CDevice"
+         name="TFLuna">
+    <description>
+      A TFLuna Time-of-Flight sensor device plugin.
+    </description>
+  </class>
+</library>

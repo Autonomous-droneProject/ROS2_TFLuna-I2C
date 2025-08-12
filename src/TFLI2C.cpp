@@ -31,7 +31,7 @@
  *  There are several explicit commands
  */
 
-#include "TFLI2C.hpp"
+#include "tfluna/TFLI2C.hpp"
 
 namespace tfluna {
   // Constructor/Destructor
@@ -47,6 +47,7 @@ bool TFLI2C::init() {
   if(ioctl(fd_, I2C_SLAVE, address_) < 0) {
     return false;
   }
+  return true;
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -205,9 +206,9 @@ bool TFLI2C::Set_Frame_Rate( uint16_t &frm)
 bool TFLI2C::Get_Frame_Rate( uint16_t &frm)
 {
     uint8_t * p_frm = (uint8_t *) &frm;
-    if( !readReg( TFL_FPS_LO)) return false;
+    if( !readReg( TFL_FPS_LO, regReply)) return false;
         else p_frm[ 0] = regReply;  // Read into `frm` array
-    if( !readReg( TFL_FPS_HI)) return false;
+    if( !readReg( TFL_FPS_HI, regReply)) return false;
         else p_frm[ 1] = regReply;  // Read into `frm` array
     return true;
 }
@@ -337,6 +338,7 @@ std::string TFLI2C::printDataArray()
       output.append( dataArray[ i] + "");
     }
     output.append("\n");
+    return output;
 }
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

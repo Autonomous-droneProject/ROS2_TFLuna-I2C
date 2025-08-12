@@ -1,8 +1,8 @@
 #include "tfluna/tfluna_device.hpp"
 
 namespace tfluna {
-TFLunaDevice::TFLunaDevice(std::string i2c_bus, uint8_t sensor_address,
-                             Config config)
+TFLunaDevice::TFLunaDevice() {}
+TFLunaDevice::TFLunaDevice(std::string i2c_bus, Config config)
     : sensor_(i2c_bus), config_(config) {}
 bool TFLunaDevice::initialize() { 
     return sensor_.Soft_Reset();
@@ -10,7 +10,7 @@ bool TFLunaDevice::initialize() {
 
 bool TFLunaDevice::configure() {
   sensor_.Set_Frame_Rate(config_.frameRate);
-
+  return true;
 }
 tca9548a::msg::SensorData TFLunaDevice::read() {
     tca9548a::msg::SensorData message;
@@ -41,7 +41,6 @@ tca9548a::msg::SensorData TFLunaDevice::read() {
         // Return an empty message with a null timestamp to signal failure
         message.header.stamp = rclcpp::Time(0, 0);
     }
-
     return message;
 }
 }

@@ -11,14 +11,14 @@ struct Config {
 };
 class TFLunaDevice : public tca9548a::I2CDevice {
 public:
-  TFLunaDevice(std::string i2c_bus, uint8_t sensor_address, Config config_);
+  TFLunaDevice();
+  TFLunaDevice(std::string i2c_bus, Config config_);
   virtual ~TFLunaDevice() = default;
   bool initialize() override;
   bool configure() override;
   tca9548a::msg::SensorData read() override;
 
 private:
-  uint8_t sensor_address_;
   tfluna::TFLI2C sensor_;
 
   Config config_;
